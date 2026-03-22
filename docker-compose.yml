@@ -1,0 +1,44 @@
+version: '3'
+
+services:
+
+  backend1:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "5001:5000"
+
+  backend2:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "5002:5000"
+
+  backend3:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "5003:5000"
+
+  load_balancer:
+    build:
+      context: .
+      dockerfile: Dockerfile.lb
+    ports:
+      - "5000:5000"
+    depends_on:
+      - backend1
+      - backend2
+      - backend3
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "7000:7000"
+    depends_on:
+      - load_balancer

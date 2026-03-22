@@ -13,9 +13,9 @@ CORS(app)
 VALID_ALGOS = ["round_robin", "least_connections", "random"]
 
 servers = [
-    "http://localhost:5001",
-    "http://localhost:5002",
-    "http://localhost:5003"
+    "http://backend1:5000",
+    "http://backend2:5000",
+    "http://backend3:5000"
 ]
 
 lb = LoadBalancer(servers)
@@ -90,4 +90,4 @@ def get_metrics():
     return jsonify(metrics.get_stats())
 
 if __name__ == "__main__":
-    app.run(port=5000)
+    app.run(host="0.0.0.0", port=5000)

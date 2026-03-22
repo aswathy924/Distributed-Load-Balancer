@@ -1,0 +1,9 @@
+FROM python:3.9
+
+WORKDIR /app
+
+COPY dashboard/ .
+
+RUN pip install flask requests flask-cors
+
+CMD ["python", "app.py"]
