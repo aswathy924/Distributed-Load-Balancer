@@ -8,5 +8,11 @@ def monitor_servers(lb):
                 requests.get(server + "/health", timeout=1)
             except:
                 print(f"{server} is down. Removing...")
-                lb.servers.remove(server)
+
+                if server in lb.servers:
+                    lb.servers.remove(server)
+
+                if server in lb.connections:
+                    del lb.connections[server]
+
         time.sleep(5)

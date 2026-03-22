@@ -16,3 +16,12 @@ class LoadBalancer:
 
     def least_connections(self):
         return min(self.connections, key=self.connections.get)
+
+    # ADD THESE TWO FUNCTIONS
+    def increment(self, server):
+        if server in self.connections:
+            self.connections[server] += 1
+
+    def decrement(self, server):
+        if server in self.connections and self.connections[server] > 0:
+            self.connections[server] -= 1
