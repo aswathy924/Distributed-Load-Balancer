@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 import requests
 import time
 from algorithms import LoadBalancer
@@ -7,13 +8,14 @@ from threading import Thread
 from health_check import monitor_servers
 
 app = Flask(__name__)
+CORS(app)
 
 VALID_ALGOS = ["round_robin", "least_connections", "random"]
 
 servers = [
-    "http://backend1:5000",
-    "http://backend2:5000",
-    "http://backend3:5000"
+    "http://localhost:5001",
+    "http://localhost:5002",
+    "http://localhost:5003"
 ]
 
 lb = LoadBalancer(servers)
@@ -40,6 +42,7 @@ def route_request():
             start = time.time()
 
             response = requests.get(server, timeout=2)
+            response.raise_for_status()
 
             response_time = time.time() - start
 
@@ -81,3 +84,10 @@ def set_algo(algo):
 @app.route("/get_algorithm")
 def get_algo():
     return {"current_algorithm": ALGO}
+
+@app.route("/metrics")
+def get_metrics():
+    return jsonify(metrics.get_stats())
+
+if __name__ == "__main__":
+    app.run(port=5000)

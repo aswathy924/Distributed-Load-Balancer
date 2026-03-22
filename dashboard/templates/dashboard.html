@@ -38,6 +38,9 @@
 
 <h2>Distributed Load Balancer Dashboard</h2>
 
+<p><b>Algorithm:</b> <span id="algo">-</span></p>
+<p><b>Uptime:</b> <span id="uptime">-</span> seconds</p>
+
 <table>
     <thead>
         <tr>
@@ -54,28 +57,49 @@
 
 <script>
 async function fetchData() {
-    const response = await fetch('/metrics');
-    const data = await response.json();
+    try {
+        const response = await fetch('http://localhost:5000/metrics');
+        const data = await response.json();
 
-    const table = document.getElementById("table-body");
-    table.innerHTML = "";
+        // Update global info
+        document.getElementById("algo").innerText = data.algorithm;
+        document.getElementById("uptime").innerText = data.uptime;
 
-    for (const server in data) {
-        const row = document.createElement("tr");
+        const table = document.getElementById("table-body");
+        table.innerHTML = "";
 
-        const statusClass = data[server].status === "UP" ? "up" : "down";
+        const servers = data.servers;
 
-        row.className = statusClass;
+        // Handle empty case
+        if (Object.keys(servers).length === 0) {
+            table.innerHTML = "<tr><td colspan='5'>No active servers</td></tr>";
+            return;
+        }
 
-        row.innerHTML = `
-            <td>${server}</td>
-            <td>${data[server].status}</td>
-            <td>${data[server].requests}</td>
-            <td>${data[server].failures}</td>
-            <td>${data[server].avg_response_time}</td>
-        `;
+        for (const server in servers) {
+            const stats = servers[server];
 
-        table.appendChild(row);
+            const row = document.createElement("tr");
+
+            // Status logic
+            const status = stats.failures > 0 ? "DOWN" : "UP";
+            const statusClass = status === "UP" ? "up" : "down";
+
+            row.className = statusClass;
+
+            row.innerHTML = `
+                <td>${server}</td>
+                <td>${status}</td>
+                <td>${stats.requests}</td>
+                <td>${stats.failures}</td>
+                <td>${stats.avg_response_time}</td>
+            `;
+
+            table.appendChild(row);
+        }
+
+    } catch (error) {
+        console.error("Error fetching data:", error);
     }
 }
 
