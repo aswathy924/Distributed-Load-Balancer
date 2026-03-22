@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Load Balancer Dashboard</title>
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+        }
+
+        table {
+            margin: auto;
+            border-collapse: collapse;
+            width: 70%;
+        }
+
+        th, td {
+            padding: 10px;
+            border: 1px solid black;
+        }
+
+        th {
+            background-color: #333;
+            color: white;
+        }
+
+        .up {
+            background-color: #b6fcb6;
+        }
+
+        .down {
+            background-color: #fcb6b6;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>Distributed Load Balancer Dashboard</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Server</th>
+            <th>Status</th>
+            <th>Requests</th>
+            <th>Failures</th>
+            <th>Avg Response Time (s)</th>
+        </tr>
+    </thead>
+    <tbody id="table-body">
+    </tbody>
+</table>
+
+<script>
+async function fetchData() {
+    const response = await fetch('/metrics');
+    const data = await response.json();
+
+    const table = document.getElementById("table-body");
+    table.innerHTML = "";
+
+    for (const server in data) {
+        const row = document.createElement("tr");
+
+        const statusClass = data[server].status === "UP" ? "up" : "down";
+
+        row.className = statusClass;
+
+        row.innerHTML = `
+            <td>${server}</td>
+            <td>${data[server].status}</td>
+            <td>${data[server].requests}</td>
+            <td>${data[server].failures}</td>
+            <td>${data[server].avg_response_time}</td>
+        `;
+
+        table.appendChild(row);
+    }
+}
+
+// Refresh every 2 seconds
+setInterval(fetchData, 2000);
+
+// Initial load
+fetchData();
+</script>
+
+</body>
+</html>
