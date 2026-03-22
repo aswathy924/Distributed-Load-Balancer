@@ -10,20 +10,26 @@ class Metrics:
         self.algorithm = "round_robin"
         self.start_time = time.time()
 
-    def record(self, server, response_time, success=True):
+    def record(self, server, response_time, success=True, is_health_check=False):
         with self.lock:
             if server not in self.data:
                 self.data[server] = {
                     "requests": 0,
                     "failures": 0,
-                    "total_time": 0
+                    "total_time": 0,
+                    "status": "UP"
                 }
 
-            self.data[server]["requests"] += 1
-            self.data[server]["total_time"] += response_time
+            # Skip request count for health checks
+            if not is_health_check:
+                self.data[server]["requests"] += 1
+                self.data[server]["total_time"] += response_time
 
             if not success:
                 self.data[server]["failures"] += 1
+                self.data[server]["status"] = "DOWN"
+            else:
+                self.data[server]["status"] = "UP"
 
     #  NEW: update algorithm
     def set_algorithm(self, algo):
@@ -44,12 +50,13 @@ class Metrics:
                 result[server] = {
                     "requests": stats["requests"],
                     "failures": stats["failures"],
-                    "avg_response_time": round(avg_time, 3)
+                    "avg_response_time": round(avg_time, 3),
+                    "status": stats.get("status", "UNKNOWN")   
                 }
 
             return {
                 "servers": result,
-                "algorithm": self.algorithm,
+                "algorithm": getattr(self, "algorithm", "N/A"),
                 "uptime": round(time.time() - self.start_time, 2)
             }
 

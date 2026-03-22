@@ -82,7 +82,7 @@ async function fetchData() {
             const row = document.createElement("tr");
 
             // Status logic
-            const status = stats.failures > 0 ? "DOWN" : "UP";
+            const status = stats.status;
             const statusClass = status === "UP" ? "up" : "down";
 
             row.className = statusClass;
