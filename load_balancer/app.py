@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
 import time
+
 from algorithms import LoadBalancer
 from metrics import metrics
 from threading import Thread
@@ -102,65 +103,6 @@ def get_algo():
 def get_metrics():
     return jsonify(metrics.get_stats())
 
-@app.route("/add_server", methods=["POST"])
-def add_server():
-    data = request.get_json()
-    server = data.get("server")
-
-    if not server:
-        return {"error": "Server URL required"}, 400
-
-    if server in lb.servers:
-        return {"message": "Server already exists"}
-
-    try:
-        response = requests.get(server + "/health", timeout=2)
-
-        if response.status_code != 200:
-            return {"error": "Server not healthy"}, 400
-
-    except:
-        return {"error": "Server not reachable"}, 400
-
-    # Only add if healthy
-    lb.servers.append(server)
-    lb.connections[server] = 0
-
-    # weights update
-    lb.weights[server] = 1
-    lb.weighted_list = lb._build_weighted_list()
-
-    # optional: add to metrics
-    metrics.record(server, 0, success=True, is_health_check=True)
-
-    return {"message": f"{server} added successfully"}
-
-
-@app.route("/remove_server", methods=["POST"])
-def remove_server():
-    data = request.get_json()
-    server = data.get("server")
-
-    if not server:
-        return {"error": "Server URL required"}, 400
-
-    if server not in lb.servers:
-        return {"message": "Server not found"}
-
-    lb.servers.remove(server)
-    lb.index = 0
-
-    if server in lb.connections:
-        del lb.connections[server]
-
-    return {"message": f"{server} removed successfully"}
-
-@app.route("/servers")
-def list_servers():
-    return {
-        "active_servers": lb.servers,
-        "connections": lb.connections
-    }
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

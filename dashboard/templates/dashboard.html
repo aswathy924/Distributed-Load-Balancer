@@ -2,44 +2,119 @@
 <html>
 <head>
     <title>Load Balancer Dashboard</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         body {
-            font-family: Arial;
-            text-align: center;
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: white;
+            margin: 0;
+        }
+
+        h2 {
+            margin: 20px;
+        }
+
+        .container {
+            width: 90%;
+            margin: auto;
+        }
+
+        .cards {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .card {
+            flex: 1;
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        select, button {
+            padding: 10px;
+            border-radius: 6px;
+            border: none;
+            margin-right: 10px;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            cursor: pointer;
         }
 
         table {
-            margin: auto;
+            width: 100%;
             border-collapse: collapse;
-            width: 70%;
+            background: #1e293b;
         }
 
         th, td {
-            padding: 10px;
-            border: 1px solid black;
+            padding: 12px;
+            border-bottom: 1px solid #334155;
         }
 
         th {
-            background-color: #333;
-            color: white;
+            background: #334155;
         }
 
-        .up {
-            background-color: #b6fcb6;
+        .status-dot {
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            display: inline-block;
         }
 
-        .down {
-            background-color: #fcb6b6;
+        .up-dot { background: #22c55e; }
+        .down-dot { background: #ef4444; }
+
+        canvas {
+            margin-top: 30px;
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 10px;
         }
     </style>
 </head>
 
 <body>
 
-<h2>Distributed Load Balancer Dashboard</h2>
+<div class="container">
 
-<p><b>Algorithm:</b> <span id="algo">-</span></p>
-<p><b>Uptime:</b> <span id="uptime">-</span> seconds</p>
+<h2>🚀 Distributed Load Balancer Dashboard</h2>
+
+<div class="cards">
+    <div class="card">
+        <h3>Algorithm</h3>
+        <p id="algo">-</p>
+    </div>
+
+    <div class="card">
+        <h3>Uptime</h3>
+        <p id="uptime">-</p>
+    </div>
+</div>
+
+<div class="controls">
+    <select id="algo-select">
+        <option value="round_robin">Round Robin</option>
+        <option value="least_connections">Least Connections</option>
+        <option value="random">Random</option>
+        <option value="weighted">Weighted</option>
+        <option value="power_of_two">Power of 2</option>
+    </select>
+
+    <button onclick="changeAlgorithm()">Apply</button>
+</div>
 
 <table>
     <thead>
@@ -48,65 +123,114 @@
             <th>Status</th>
             <th>Requests</th>
             <th>Failures</th>
-            <th>Avg Response Time (s)</th>
+            <th>Avg Response Time</th>
         </tr>
     </thead>
-    <tbody id="table-body">
-    </tbody>
+    <tbody id="table-body"></tbody>
 </table>
 
+<!-- ✅ ONLY ONE CHART -->
+<h3 style="margin-top:30px;">📊 Requests Distribution</h3>
+<canvas id="requestsChart"></canvas>
+
+</div>
+
 <script>
+let requestsChart;
+
+const colors = [
+    '#3b82f6', '#22c55e', '#f59e0b',
+    '#ef4444', '#a855f7', '#14b8a6'
+];
+
 async function fetchData() {
     try {
-        const response = await fetch('http://localhost:5000/metrics');
-        const data = await response.json();
+        const res = await fetch('http://localhost:5000/metrics');
+        const data = await res.json();
 
-        // Update global info
-        document.getElementById("algo").innerText = data.algorithm;
-        document.getElementById("uptime").innerText = data.uptime;
+        document.getElementById("algo").innerText = data.algorithm || "-";
+        document.getElementById("uptime").innerText = data.uptime + " sec";
 
         const table = document.getElementById("table-body");
         table.innerHTML = "";
 
-        const servers = data.servers;
+        const servers = data.servers || {};
 
-        // Handle empty case
-        if (Object.keys(servers).length === 0) {
-            table.innerHTML = "<tr><td colspan='5'>No active servers</td></tr>";
-            return;
-        }
+        let labels = [];
+        let reqData = [];
+        let bgColors = [];
+
+        let i = 0;
 
         for (const server in servers) {
-            const stats = servers[server];
+            const s = servers[server];
 
-            const row = document.createElement("tr");
+            const dot = s.status === "UP"
+                ? '<span class="status-dot up-dot"></span>'
+                : '<span class="status-dot down-dot"></span>';
 
-            // Status logic
-            const status = stats.status;
-            const statusClass = status === "UP" ? "up" : "down";
-
-            row.className = statusClass;
-
-            row.innerHTML = `
-                <td>${server}</td>
-                <td>${status}</td>
-                <td>${stats.requests}</td>
-                <td>${stats.failures}</td>
-                <td>${stats.avg_response_time}</td>
+            const row = `
+                <tr>
+                    <td>${server}</td>
+                    <td>${dot} ${s.status}</td>
+                    <td>${s.requests}</td>
+                    <td>${s.failures}</td>
+                    <td>${s.avg_response_time}</td>
+                </tr>
             `;
 
-            table.appendChild(row);
+            table.innerHTML += row;
+
+            labels.push(server);
+            reqData.push(s.requests);
+            bgColors.push(colors[i % colors.length]);
+            i++;
         }
 
-    } catch (error) {
-        console.error("Error fetching data:", error);
+        updateChart(labels, reqData, bgColors);
+
+    } catch (e) {
+        console.error(e);
     }
 }
 
-// Refresh every 2 seconds
-setInterval(fetchData, 2000);
+function updateChart(labels, data, colors) {
 
-// Initial load
+    if (requestsChart) requestsChart.destroy();
+
+    requestsChart = new Chart(document.getElementById('requestsChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Requests per Server',
+                data: data,
+                backgroundColor: colors,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    ticks: { color: 'white' }
+                },
+                y: {
+                    ticks: { color: 'white' }
+                }
+            }
+        }
+    });
+}
+
+async function changeAlgorithm() {
+    const algo = document.getElementById("algo-select").value;
+    await fetch(`http://localhost:5000/set_algorithm/${algo}`);
+}
+
+setInterval(fetchData, 2000);
 fetchData();
 </script>
 
