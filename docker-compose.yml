@@ -42,3 +42,15 @@ services:
       - "7000:7000"
     depends_on:
       - load_balancer
+
+  locust:
+    image: locustio/locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./client:/mnt/locust
+    environment:
+      - LOCUST_HOST=http://load_balancer:5000
+    command: -f /mnt/locust/locustfile.py
+    depends_on:
+      - load_balancer

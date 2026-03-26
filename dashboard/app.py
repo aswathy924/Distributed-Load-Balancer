@@ -1,26 +1,14 @@
 from flask import Flask, render_template
 from flask_cors import CORS
-import sys
-import os
-import requests
-
-# # Adds the parent directory to the search path
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# from load_balancer.metrics import metrics
 
 app = Flask(__name__)
 CORS(app)
 
 @app.route("/")
 def dashboard():
-    try:
-        data = requests.get("http://localhost:5000/metrics").json()
-    except:
-        data = {"servers": {}, "algorithm": "N/A", "uptime": 0}
-
-    return render_template("dashboard.html", data=data)
-
+    # The frontend is fully decoupled. All metrics fetching is handled by the browser.
+    # This prevents Docker internal networking problems where "localhost" points to the dashboard container itself.
+    return render_template("dashboard.html")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0",port=7000)
+    app.run(host="0.0.0.0", port=7000)
