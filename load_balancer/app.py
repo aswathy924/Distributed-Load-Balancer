@@ -1,35 +1,39 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-import requests
+import asyncio
 import time
+from typing import Optional
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+import httpx
 
 from algorithms import LoadBalancer
 from metrics import metrics
-from threading import Thread
 from health_check import monitor_servers
+from config import settings
 
-app = Flask(__name__)
-CORS(app)
+app = FastAPI(title="Distributed Load Balancer API")
 
-VALID_ALGOS = [
-    "round_robin",
-    "least_connections",
-    "random",
-    "weighted",
-    "power_of_two"
-]
+# Setup CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-servers = [
-    "http://backend1:5000",
-    "http://backend2:5000",
-    "http://backend3:5000"
-]
+# Initialize components
+lb = LoadBalancer(list(settings.SERVERS))
+ALGO = settings.DEFAULT_ALGO
 
-lb = LoadBalancer(servers)
-ALGO = "round_robin"
-Thread(target=monitor_servers, args=(lb,), daemon=True).start()
+@app.on_event("startup")
+async def startup_event():
+    # Start the background health check task
+    asyncio.create_task(monitor_servers(lb))
 
-def get_server():
+def get_server(client_ip: str) -> Optional[str]:
+    """Retrieves the next available backend server based on the active algorithm."""
+    # Ensure current algorithm is logged to metrics
     if ALGO == "round_robin":
         return lb.round_robin()
     elif ALGO == "least_connections":
@@ -40,69 +44,115 @@ def get_server():
         return lb.weighted_round_robin()
     elif ALGO == "power_of_two":
         return lb.power_of_two()
-
-@app.route("/")
-def route_request():
-    if not lb.servers:   
-        return {"error": "No servers available"}, 500
+    elif ALGO == "consistent_hashing":
+        return lb.consistent_hashing(client_ip)
     
-    for _ in range(len(lb.servers)):
+    return lb.round_robin()
 
-        server = get_server()
+# Define API routes BEFORE the catch-all proxy routes
+
+@app.get("/set_algorithm/{algo}")
+async def set_algo(algo: str):
+    """Sets the active routing algorithm."""
+    global ALGO
+
+    if algo not in settings.VALID_ALGOS:
+        raise HTTPException(status_code=400, detail=f"Choose from {settings.VALID_ALGOS}")
+
+    ALGO = algo
+    await metrics.set_algorithm(algo)
+    return {"message": f"Algorithm set to {algo}"}
+
+@app.get("/get_algorithm")
+async def get_algo():
+    """Gets the active routing algorithm."""
+    return {"current_algorithm": ALGO}
+
+@app.get("/metrics")
+async def get_metrics():
+    """Returns the current load balancing statistics."""
+    return await metrics.get_stats()
+
+
+# Proxy Routing (Catch-all)
+
+async def proxy_request(request: Request, path: str = ""):
+    """
+    Acts as the reverse proxy, forwarding client requests to the chosen backend server asynchronously.
+    """
+    if not lb.servers:
+        raise HTTPException(status_code=500, detail="No backend servers available")
+
+    client_ip = request.client.host
+    
+    # We will try servers until one succeeds or we've tried as many times as there are active servers
+    for _ in range(len(lb.servers)):
+        server = get_server(client_ip)
+        
+        if not server:
+            continue
 
         try:
             lb.increment(server)
+            start_time = time.time()
 
-            start = time.time()
+            # Forward the request asynchronously
+            async with httpx.AsyncClient() as client:
+                query = request.url.query
+                url_path = f"/{path}" if path else "/"
+                url = f"{server}{url_path}" + (f"?{query}" if query else "")
+                
+                # Fetching the body for non-GET requests
+                body = await request.body()
+                
+                # Exclude 'host' header to avoid conflict, and 'content-length' which httpx recalculates
+                headers = dict(request.headers)
+                headers.pop("host", None)
+                headers.pop("content-length", None)
 
-            response = requests.get(server, timeout=2)
-            response.raise_for_status()
+                response = await client.request(
+                    method=request.method,
+                    url=url,
+                    content=body,
+                    headers=headers,
+                    timeout=2.0
+                )
 
-            response_time = time.time() - start
-
+            response_time = time.time() - start_time
             lb.decrement(server)
 
-            # NEW metrics usage
-            metrics.record(server, response_time, success=True)
-            metrics.set_algorithm(ALGO)
+            # Record metrics
+            await metrics.record(server, response_time, success=True)
+            await metrics.set_algorithm(ALGO)
 
-            return jsonify(response.json())
+            # Return the response mimicking the backend
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                # remove headers that can cause issues
+                headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")}
+            )
 
-        except Exception as e:
-            print(f"{server} failed: {e}")
-
+        except Exception as exc:
+            print(f"[ERROR] {server} failed: {exc}")
             lb.decrement(server)
+            
+            # Record failure
+            await metrics.record(server, 0.0, success=False)
+            
+            # Remove failed server dynamically
+            lb.remove_server(server)
 
-            #  record failure
-            metrics.record(server, 0, success=False)
+    raise HTTPException(status_code=500, detail="All backend servers failed")
 
-            # remove failed server
-            if server in lb.servers:
-                lb.servers.remove(server)
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def route_request_with_path(request: Request, path: str):
+    return await proxy_request(request, path)
 
-            if server in lb.connections:
-                del lb.connections[server]
-
-    return {"error": "All servers down"}, 500
-
-@app.route("/set_algorithm/<algo>")
-def set_algo(algo):
-    global ALGO
-
-    if algo not in VALID_ALGOS:
-        return {"error": f"Choose from {VALID_ALGOS}"}, 400
-
-    ALGO = algo
-    return {"message": f"Algorithm set to {algo}"}
-
-@app.route("/get_algorithm")
-def get_algo():
-    return {"current_algorithm": ALGO}
-
-@app.route("/metrics")
-def get_metrics():
-    return jsonify(metrics.get_stats())
-
+@app.api_route("/", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+async def route_root_request(request: Request):
+    return await proxy_request(request, "")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=settings.PORT, reload=True)

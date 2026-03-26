@@ -1,39 +1,41 @@
-import time
-import requests
+import asyncio
+import httpx
 from metrics import metrics
+from algorithms import LoadBalancer
+from config import settings
 
+async def monitor_servers(lb: LoadBalancer):
+    """
+    Continuously monitors backend servers through asynchronous HTTP checks.
+    Automatically re-adds them to the load balancing pool when they come back up.
+    """
+    # Track all known servers
+    all_servers = list(settings.SERVERS)
 
-def monitor_servers(lb):
-    # Store all original servers
-    all_servers = list(lb.servers)
+    async with httpx.AsyncClient(timeout=1.0) as client:
+        while True:
+            for server in all_servers:
+                try:
+                    # Request the health endpoint asynchronously
+                    response = await client.get(f"{server}/health")
+                    response.raise_for_status()
 
-    while True:
-        for server in all_servers:
-
-            try:
-                response = requests.get(server + "/health", timeout=1)
-
-                #  If server is alive and NOT in active list → RE-ADD
-                if response.status_code == 200:
+                    # If server is alive and NOT in active list -> RE-ADD
                     if server not in lb.servers:
-                        print(f"{server} is back ONLINE. Re-adding...")
-                        lb.servers.append(server)
-                        lb.connections[server] = 0
+                        print(f"[HEALTH] {server} is back ONLINE. Re-adding...")
+                        lb.add_server(server)
 
-                    #  mark as UP
-                    metrics.record(server, 0, success=True, is_health_check=True)
+                    # Mark as UP in global metrics
+                    await metrics.record(server, 0.0, success=True, is_health_check=True)
 
-            except:
-                if server in lb.servers:
-                    print(f"{server} is DOWN. Removing...")
-                    lb.servers.remove(server)
+                except Exception:
+                    # Failed health check, remove the server
+                    if server in lb.servers:
+                        print(f"[HEALTH] {server} is DOWN. Removing from active routing pool...")
+                        lb.remove_server(server)
 
-                    lb.index = 0
+                    # Mark as DOWN in global metrics
+                    await metrics.record(server, 0.0, success=False, is_health_check=True)
 
-                    if server in lb.connections:
-                        del lb.connections[server]
-
-                #  IMPORTANT: mark as DOWN in metrics
-                metrics.record(server, 0, success=False, is_health_check=True)
-
-        time.sleep(2)  # check every 2 seconds
+            # Wait 2 seconds before the next sweep
+            await asyncio.sleep(2)

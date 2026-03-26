@@ -1,17 +1,27 @@
-import threading
+import asyncio
 import time
+from typing import Dict, Any
+
+from config import settings
 
 class Metrics:
+    """
+    A thread-safe metrics collector for load balancing statistics.
+    Designed for async execution via asyncio locks.
+    """
     def __init__(self):
-        self.data = {}
-        self.lock = threading.Lock()
+        self.data: Dict[str, Dict[str, Any]] = {}
+        self.lock = asyncio.Lock()
 
-        #  NEW: global system info
-        self.algorithm = "round_robin"
+        # Global system info
+        self.algorithm = settings.DEFAULT_ALGO
         self.start_time = time.time()
 
-    def record(self, server, response_time, success=True, is_health_check=False):
-        with self.lock:
+    async def record(self, server: str, response_time: float, success: bool = True, is_health_check: bool = False):
+        """
+        Record a request mapping to a server asynchronously.
+        """
+        async with self.lock:
             if server not in self.data:
                 self.data[server] = {
                     "requests": 0,
@@ -31,14 +41,14 @@ class Metrics:
             else:
                 self.data[server]["status"] = "UP"
 
-    #  NEW: update algorithm
-    def set_algorithm(self, algo):
-        with self.lock:
+    async def set_algorithm(self, algo: str):
+        """Update the active routing algorithm."""
+        async with self.lock:
             self.algorithm = algo
 
-    #  NEW: get full stats (dashboard ready)
-    def get_stats(self):
-        with self.lock:
+    async def get_stats(self) -> Dict[str, Any]:
+        """Fetch full diagnostic report (used by Dashboard)."""
+        async with self.lock:
             result = {}
 
             for server, stats in self.data.items():
@@ -56,16 +66,16 @@ class Metrics:
 
             return {
                 "servers": result,
-                "algorithm": getattr(self, "algorithm", "N/A"),
+                "algorithm": self.algorithm,
                 "uptime": round(time.time() - self.start_time, 2)
             }
 
-    #  OPTIONAL: reset metrics (useful for testing)
-    def reset(self):
-        with self.lock:
+    async def reset(self):
+        """Resets the statistics."""
+        async with self.lock:
             self.data = {}
             self.start_time = time.time()
 
 
-#  VERY IMPORTANT: global instance (used in app.py)
+# Global instance imported by the API
 metrics = Metrics()
