@@ -15,6 +15,7 @@ class LoadBalancer:
             servers (List[str]): A list of server URLs (e.g. 'http://backend1:5000')
         """
         self.servers = servers
+        self.all_registered_servers = set(servers)
         self.index = 0
         self.connections = {server: 0 for server in servers}
 
@@ -32,6 +33,7 @@ class LoadBalancer:
 
     def add_server(self, server: str):
         """Add a server dynamically to the pool."""
+        self.all_registered_servers.add(server)
         if server not in self.servers:
             self.servers.append(server)
             self.connections[server] = 0
@@ -40,7 +42,7 @@ class LoadBalancer:
             self._add_node_to_ring(server)
 
     def remove_server(self, server: str):
-        """Remove a server from the pool dynamically."""
+        """Temporarily remove a server from the active routing pool (e.g. failed health check)."""
         if server in self.servers:
             self.servers.remove(server)
             if server in self.connections:
@@ -49,9 +51,13 @@ class LoadBalancer:
                 del self.weights[server]
             self.weighted_list = self._build_weighted_list()
             self._remove_node_from_ring(server)
-            
-            # Reset round robin index to avoid out of bounds
             self.index = 0
+
+    def unregister_server(self, server: str):
+        """Permanently remove a server from tracking entirely across the whole system."""
+        self.remove_server(server)
+        if server in self.all_registered_servers:
+            self.all_registered_servers.remove(server)
 
     # ---------------- ALGORITHMS ---------------- #
 

@@ -41,6 +41,12 @@ class Metrics:
             else:
                 self.data[server]["status"] = "UP"
 
+    async def remove_server(self, server: str):
+        """Remove a server from metrics tracking."""
+        async with self.lock:
+            if server in self.data:
+                del self.data[server]
+
     async def set_algorithm(self, algo: str):
         """Update the active routing algorithm."""
         async with self.lock:

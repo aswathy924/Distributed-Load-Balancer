@@ -73,6 +73,29 @@ async def get_metrics():
     """Returns the current load balancing statistics."""
     return await metrics.get_stats()
 
+@app.post("/api/servers/add")
+async def add_server_endpoint(request: Request):
+    """Dynamically register a new backend server."""
+    data = await request.json()
+    new_server = data.get("server")
+    if not new_server:
+        raise HTTPException(status_code=400, detail="Missing 'server' field")
+    
+    lb.add_server(new_server)
+    return {"message": f"Successfully registered {new_server}", "active": lb.servers}
+
+@app.post("/api/servers/remove")
+async def remove_server_endpoint(request: Request):
+    """Permanently unregister an existing backend server."""
+    data = await request.json()
+    server_to_remove = data.get("server")
+    if not server_to_remove:
+        raise HTTPException(status_code=400, detail="Missing 'server' field")
+    
+    lb.unregister_server(server_to_remove)
+    await metrics.remove_server(server_to_remove)
+    return {"message": f"Successfully unregistered {server_to_remove}", "active": lb.servers}
+
 
 # Proxy Routing (Catch-all)
 
