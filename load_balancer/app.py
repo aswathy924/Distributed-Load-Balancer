@@ -138,7 +138,7 @@ async def proxy_request(request: Request, path: str = ""):
                     url=url,
                     content=body,
                     headers=headers,
-                    timeout=2.0
+                    timeout=5.0
                 )
 
             response_time = time.time() - start_time
@@ -162,9 +162,6 @@ async def proxy_request(request: Request, path: str = ""):
             
             # Record failure
             await metrics.record(server, 0.0, success=False)
-            
-            # Remove failed server dynamically
-            lb.remove_server(server)
 
     raise HTTPException(status_code=500, detail="All backend servers failed")
 
