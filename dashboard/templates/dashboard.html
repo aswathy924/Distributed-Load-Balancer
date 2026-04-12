@@ -340,11 +340,15 @@
             <div class="glass-card">
                 <div class="kpi-title">Cluster Provisioning</div>
                 <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; width: 100%;">
-                    <input type="text" id="server-input" placeholder="http://new-node:5000" style="flex:1; width: 100px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--primary); color: white; padding: 0.8rem; border-radius: 8px; font-size: 0.85rem; outline: none; box-shadow: 0 0 10px rgba(59,130,246,0.1);">
-                    <button onclick="manageServer('add')" style="padding: 0.8rem; background: var(--success);">Add</button>
-                    <button onclick="manageServer('remove')" style="padding: 0.8rem; background: var(--danger);">Rm</button>
+                    <input type="text" id="server-input" placeholder="http://new-node:5000"
+                        style="flex:1; width: 100px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--primary); color: white; padding: 0.8rem; border-radius: 8px; font-size: 0.85rem; outline: none; box-shadow: 0 0 10px rgba(59,130,246,0.1);">
+                    <button onclick="manageServer('add')"
+                        style="padding: 0.8rem; background: var(--success);">Add</button>
+                    <button onclick="manageServer('remove')"
+                        style="padding: 0.8rem; background: var(--danger);">Rm</button>
                 </div>
-                <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.5rem;">Dynamically register or evict nodes</p>
+                <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.5rem;">Dynamically register or
+                    evict nodes</p>
             </div>
         </div>
 
@@ -570,7 +574,7 @@
         async function manageServer(action) {
             const input = document.getElementById("server-input");
             const serverUrl = input.value.trim();
-            if(!serverUrl) return;
+            if (!serverUrl) return;
 
             // Optional cleanup mechanism
             const normalizedUrl = serverUrl.startsWith("http") ? serverUrl : `http://${serverUrl}`;
@@ -581,7 +585,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ server: normalizedUrl })
                 });
-                
+
                 if (res.ok) {
                     showToast(`Successfully ${action}ed ${normalizedUrl}`);
                     input.value = "";

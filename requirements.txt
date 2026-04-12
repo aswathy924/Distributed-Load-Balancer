@@ -1,0 +1,14 @@
+# Core Dependencies
+fastapi
+uvicorn
+httpx
+pydantic-settings
+python-multipart
+
+# Backend & Dashboard
+flask
+flask-cors
+requests
+
+# Load Testing
+locust
